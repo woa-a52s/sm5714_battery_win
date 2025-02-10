@@ -1,6 +1,7 @@
 # Siliconmitus SM5714 Battery Fuel Gauge Driver
 
-- Project was based on [windows_hardware_battery_bq27742_src](https://github.com/WOA-Project/windows_hardware_battery_bq27742_src).
+- Driver is based on [windows_hardware_battery_bq27742_src](https://github.com/WOA-Project/windows_hardware_battery_bq27742_src).
+- Reference: [SansungTabS6-TypeC_Pmic](https://github.com/Project-Aloha/SansungTabS6-TypeC_Pmic)
 
 This driver is designed for the Siliconmitus SM5714 PMIC fuel gauges found on various Samsung devices. 
 
