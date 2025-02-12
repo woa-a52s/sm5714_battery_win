@@ -41,6 +41,16 @@ typedef struct _SPB_CONTEXT
 } SPB_CONTEXT;
 
 NTSTATUS
+SpbWriteRead(
+	_In_                            SPB_CONTEXT* SpbContext,
+	_In_reads_(SendLength)          PVOID           SendData,
+	_In_                            USHORT          SendLength,
+	_Out_writes_(Length)            PVOID           Data,
+	_In_                            USHORT          Length,
+	_In_                            ULONG           DelayUs
+);
+
+NTSTATUS
 SpbReadDataSynchronously(
 	IN SPB_CONTEXT* SpbContext,
 	IN UCHAR Address,

@@ -25,6 +25,8 @@
 #include "SM5714Battery.h"
 #include "spb.h"
 #include <spb.tmh>
+#include <reshub.h>
+#include <spb.h>
 
 #define I2C_VERBOSE_LOGGING 1
 
@@ -332,6 +334,279 @@ exit:
 
 	return status;
 }
+
+NTSTATUS
+_SpbSequence(
+	_In_                        SPB_CONTEXT* SpbContext,
+	_In_reads_(SequenceLength)  PVOID        Sequence,
+	_In_                        SIZE_T       SequenceLength,
+	_Out_                       PULONG       BytesReturned,
+	_In_                        ULONG        Timeout
+)
+/*++
+
+  Routine Description:
+	This routine forwards a sequence request to the SPB I/O target
+  Arguments:
+	FxIoTarget      - The SPB IoTarget to which to send the IOCTL/Read/Write
+	Sequence        - Pointer to a list of sequence transfers
+	SequenceLength  - Length of sequence transfers
+	BytesReturned   - The number of bytes transferred in the actual transaction
+	Timeout         - The timeout associated with this transfer
+						Default is HIDI2C_REQUEST_DEFAULT_TIMEOUT second
+						0 means no timeout
+  Return Value:
+	NTSTATUS Status indicating success or failure
+--*/
+{
+	NTSTATUS status;
+
+	WdfWaitLockAcquire(SpbContext->SpbLock, NULL);
+
+	//
+	// Create preallocated WDFMEMORY.
+	//
+	WDFMEMORY memorySequence = NULL;
+
+	WDF_OBJECT_ATTRIBUTES attributes;
+	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+
+	status = WdfMemoryCreatePreallocated(
+		&attributes,
+		Sequence,
+		SequenceLength,
+		&memorySequence);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			SM5714_BATTERY_ERROR,
+			"WdfMemoryCreatePreallocated failed creating memory for sequence"
+			"status:%!STATUS!",
+			status);
+
+		goto exit;
+	}
+
+	WDF_MEMORY_DESCRIPTOR memoryDescriptor;
+	WDF_MEMORY_DESCRIPTOR_INIT_HANDLE(
+		&memoryDescriptor,
+		memorySequence,
+		NULL);
+
+	ULONG_PTR bytes = 0;
+
+	if (Timeout == 0)
+	{
+		//
+		// Send the SPB sequence IOCTL without a timeout set
+		//
+
+		status = WdfIoTargetSendIoctlSynchronously(
+			SpbContext->SpbIoTarget,
+			NULL,
+			IOCTL_SPB_EXECUTE_SEQUENCE,
+			&memoryDescriptor,
+			NULL,
+			NULL,
+			&bytes);
+	}
+	else
+	{
+		//
+		// Set a request timeout
+		//
+		WDF_REQUEST_SEND_OPTIONS sendOptions;
+		WDF_REQUEST_SEND_OPTIONS_INIT(&sendOptions, WDF_REQUEST_SEND_OPTION_TIMEOUT);
+		sendOptions.Timeout = WDF_REL_TIMEOUT_IN_SEC(Timeout);
+
+		//
+		// Send the SPB sequence IOCTL.
+		//
+
+		status = WdfIoTargetSendIoctlSynchronously(
+			SpbContext->SpbIoTarget,
+			NULL,
+			IOCTL_SPB_EXECUTE_SEQUENCE,
+			&memoryDescriptor,
+			NULL,
+			&sendOptions,
+			&bytes);
+	}
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			SM5714_BATTERY_ERROR,
+			"Failed sending SPB Sequence IOCTL bytes:%lu status:%!STATUS!",
+			(ULONG)bytes,
+			status);
+
+		goto exit;
+	}
+
+	//
+	// Copy the number of bytes transmitted over the bus
+	// The controller needs to support querying for actual bytes
+	// for each transaction
+	//
+
+	*BytesReturned = (ULONG)bytes;
+
+exit:
+
+	WdfWaitLockRelease(SpbContext->SpbLock);
+	WdfObjectDelete(memorySequence);
+	return status;
+}
+
+NTSTATUS
+SpbWriteRead(
+	_In_                            SPB_CONTEXT* SpbContext,
+	_In_reads_(SendLength)          PVOID           SendData,
+	_In_                            USHORT          SendLength,
+	_Out_writes_(Length)            PVOID           Data,
+	_In_                            USHORT          Length,
+	_In_                            ULONG           DelayUs
+)
+/*++
+
+  Routine Description:
+	This routine forwards a write-read sequence to the SPB I/O target
+  Arguments:
+	SpbContext      -       Pointer to the current device context
+	SendData                The first byte buffer containing the data
+	SendLength              The length of the first byte buffer data
+	Data                    The second byte buffer containing the data
+	Length                  The length of the second byte buffer data
+	DelayUs                 The delay between calls
+  Return Value:
+	NTSTATUS Status indicating success or failure
+--*/
+{
+	NTSTATUS status;
+
+	NT_ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+	if (SendData == NULL || SendLength <= 0 ||
+		Data == NULL || Length <= 0)
+	{
+		status = STATUS_INVALID_PARAMETER;
+		Trace(
+			TRACE_LEVEL_ERROR,
+			SM5714_BATTERY_ERROR,
+			"SpbWriteRead failed parameters DataFirst:%p DataLengthFirst:%lu "
+			"DataSecond:%p DataLengthSecond:%lu status:%!STATUS!",
+			SendData,
+			SendLength,
+			Data,
+			Length,
+			status);
+
+		goto exit;
+	}
+
+#if I2C_VERBOSE_LOGGING
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "I2CWRITE: LENGTH=%d", SendLength);
+	for (ULONG j = 0; j < SendLength; j++)
+	{
+		UCHAR byte = ((PUCHAR)SendData)[j];
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, " %02hhX", byte);
+	}
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n");
+#endif
+
+	//
+	// Compact the adjacent writes of the two register accesses into a 
+	// single write transfer list entry without restarts between them.
+	//
+	//SPB_TRANSFER_BUFFER_LIST_ENTRY BufferListFirst[1];
+	//BufferListFirst[0].Buffer = SendData;
+	//BufferListFirst[0].BufferCb = SendLength;
+
+	//
+	// Build the SPB sequence
+	//
+	SPB_TRANSFER_LIST_AND_ENTRIES(2)    sequence;
+	SPB_TRANSFER_LIST_INIT(&(sequence.List), 2);
+
+	{
+		//
+		// PreFAST cannot figure out the SPB_TRANSFER_LIST_ENTRY
+		// "struct hack" size but using an index variable quiets 
+		// the warning. This is a false positive from OACR.
+		// 
+
+		ULONG index = 0;
+
+		sequence.List.Transfers[index] = SPB_TRANSFER_LIST_ENTRY_INIT_SIMPLE(
+			SpbTransferDirectionToDevice,
+			0,
+			SendData,
+			SendLength);
+
+		sequence.List.Transfers[index + 1] = SPB_TRANSFER_LIST_ENTRY_INIT_SIMPLE(
+			SpbTransferDirectionFromDevice,
+			DelayUs,
+			Data,
+			Length);
+	}
+
+	//
+	// Send the read as a Sequence request to the SPB target
+	// 
+	ULONG bytesReturned = 0;
+	status = _SpbSequence(SpbContext, &sequence, sizeof(sequence), &bytesReturned, 100);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			SM5714_BATTERY_ERROR,
+			"SpbSequence failed sending a sequence "
+			"status:%!STATUS!",
+			status);
+
+		goto exit;
+	}
+
+#if I2C_VERBOSE_LOGGING
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "I2CREAD: LENGTH=%d", Length);
+	for (ULONG j = 0; j < Length; j++)
+	{
+		UCHAR byte = ((PUCHAR)Data)[j];
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, " %02hhX", byte);
+	}
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n");
+#endif
+
+	//
+	// Check if this is a "short transaction" i.e. the sequence
+	// resulted in lesser bytes transmitted/received than expected
+	//
+	ULONG expectedLength = SendLength + Length;
+	if (bytesReturned < expectedLength)
+	{
+		status = STATUS_DEVICE_PROTOCOL_ERROR;
+		Trace(
+			TRACE_LEVEL_ERROR,
+			SM5714_BATTERY_ERROR,
+			"SpbSequence returned with 0x%lu bytes expected:0x%lu bytes "
+			"status:%!STATUS!",
+			bytesReturned,
+			expectedLength,
+			status);
+
+		goto exit;
+	}
+
+exit:
+
+	return status;
+}
+
 VOID
 SpbTargetDeinitialize(
 	IN WDFDEVICE FxDevice,

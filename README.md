@@ -20,7 +20,7 @@ Device(BAT)
     {
         Name (RBUF, ResourceTemplate ()
         {
-            I2CSerialBus (0x49, ControllerInitiated, 400000, AddressingMode7Bit, "\\_SB.I2C4",,,,)
+            I2CSerialBus (0x71,, 400000, AddressingMode7Bit, "\\_SB.I2C4",,,,)
 
             GpioInt (Edge, ActiveLow, Exclusive, PullNone, 0, "\\_SB.GIO0") {54}
         })

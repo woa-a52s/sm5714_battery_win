@@ -198,26 +198,9 @@ SM5714BatteryQueryBatteryInformation(PSM5714_BATTERY_FDO_DATA DevExt, PBATTERY_I
 	//
 	// Fetch cycle count over I2C
 	//
-	int  ret_cycle = 0;
 	int  CycleCount = 0;
-
-	Status = SpbWriteDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RADDR, &SM5714_FG_ADDR_SRAM_SOC_CYCLE, 2);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to write cycle sub-address (0x87) to RADDR (0x8C) . Status=0x%08lX\n", Status);
-	}
-
-	Status = SpbReadDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RDATA, &ret_cycle, 2);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "SpbReadDataSynchronously failed with Status = 0x%08lX\n", Status);
-	}
-	if (ret_cycle < 0) {
-		CycleCount = 0;
-	}
-	else {
-		CycleCount = ret_cycle & 0x00FF;
-	}
+	Status = 0;
+	CycleCount = 0; // TODO Add cycle count readings
 
 	BatteryInformationResult->CycleCount = CycleCount;
 
@@ -386,7 +369,6 @@ Return Value:
 	WCHAR StringResult[MAX_BATTERY_STRING_SIZE] = { 0 };
 	BATTERY_MANUFACTURE_DATE ManufactureDate = { 0 };
 
-	int ret_Temperature = 0;
 	int Temperature = 0;
 	USHORT DateData = 0;
 
@@ -555,26 +537,7 @@ Return Value:
 	// Fetch temperature over I2C
 	//
 	case BatteryTemperature:
-
-		Status = SpbWriteDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RADDR, &SM5714_FG_ADDR_SRAM_TEMPERATURE, 2);
-		if (!NT_SUCCESS(Status))
-		{
-			Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to write temperature sub-address (0x07) to RADDR (0x8C) . Status=0x%08lX\n", Status);
-		}
-
-		Status = SpbReadDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RDATA, &ret_Temperature, 2);
-		if (!NT_SUCCESS(Status))
-		{
-			Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "SpbReadDataSynchronously failed with Status = 0x%08lX\n", Status);
-		}
-		if (ret_Temperature < 0) {
-			Temperature = 0;
-		}
-		else {
-			Temperature = (((ret_Temperature & 0x7FFF) * 10) * 2989) >> 11 >> 8;
-			if (ret_Temperature & 0x8000)
-				Temperature *= -1;
-		}
+		Temperature = 0; // TODO Add temperature readings
 
 		Temperature = (ULONG)Temperature / (ULONG)10;
 
@@ -666,85 +629,40 @@ Return Value:
 	// Set default flags to: battery discharging
 	BatteryStatus->PowerState = BATTERY_DISCHARGING;
 
-	// Local variables for capacity, voltage, current
-	unsigned int     Capacity = 0;
-	unsigned int     Voltage = 0;
-	int              Current = 0;
-	int              ret_Capacity = 0;
-	int              ret_Voltage = 0;
-	int              ret_Current = 0;
+	unsigned char readCmd = (unsigned char)SM5714_FG_REG_SRAM_RDATA;
 
 	//
 	// Fetch State of Charge over I2C
 	//
-	Status = SpbWriteDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RADDR, &SM5714_FG_ADDR_SRAM_SOC, 2);
+	unsigned int     Capacity = 0;
+	unsigned short addr_soc = SM5714_FG_ADDR_SRAM_SOC;
+	unsigned short rawCapacity = 0;
+
+	Status = SpbWriteDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RADDR, &addr_soc, sizeof(addr_soc));
 	if (!NT_SUCCESS(Status))
 	{
 		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to write SoC sub-address (0x00) to RADDR (0x8C) . Status=0x%08lX\n", Status);
 	}
 
-	Status = SpbReadDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RDATA, &ret_Capacity, 2);
+	Status = SpbWriteRead(&DevExt->I2CContext, &readCmd, sizeof(readCmd), &rawCapacity, sizeof(rawCapacity), 0);
 	if (!NT_SUCCESS(Status))
 	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "SpbReadDataSynchronously failed with Status = 0x%08lX\n", Status);
-		goto QueryStatusEnd;
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to WriteRead 0x8D. Status=0x%08lX\n", Status);
 	}
-	if (ret_Capacity < 0) {
-		Capacity = 500;
-	}
-	else {
-		Capacity = ((ret_Capacity & 0xff00) >> 8) * 10; //integer bit;
-		Capacity = Capacity + (((ret_Capacity & 0x00ff) * 10) / 256); // integer + fractional bit
-	}
+	
+	Capacity = FIXED_POINT_8_8_EXTEND_TO_INT((unsigned short)rawCapacity, 10);
 
 	//
 	// Fetch Voltage(mV) over I2C
 	//
-	Status = SpbWriteDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RADDR, &SM5714_FG_ADDR_SRAM_OCV, 2);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to write OCV sub-address (0x01) to RADDR (0x8C) . Status=0x%08lX\n", Status);
-	}
-
-	Status = SpbReadDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RDATA, &ret_Voltage, 2);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "SpbReadDataSynchronously failed with Status = 0x%08lX\n", Status);
-		goto QueryStatusEnd;
-	}
-	if (ret_Voltage < 0) {
-		Voltage = 4000;
-	}
-	else {
-		Voltage = ((ret_Voltage & 0x3800) >> 11) * 1000;         //integer;
-		Voltage = Voltage + (((ret_Voltage & 0x07ff) * 1000) / 2048); // integer + fractional
-	}
+	unsigned int     Voltage = 0;
+	Voltage = 0; // TODO Add voltage readings
 
 	//
 	// Fetch Current (mA) over I2C
 	//
-	Status = SpbWriteDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RADDR, &SM5714_FG_ADDR_SRAM_CURRENT, 2);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to write CURR sub-address (0x05) to RADDR (0x8C) . Status=0x%08lX\n", Status);
-	}
-
-	Status = SpbReadDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RDATA, &ret_Current, 2);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "SpbReadDataSynchronously failed with Status = 0x%08lX\n", Status);
-		goto QueryStatusEnd;
-	}
-	if (ret_Current < 0)
-	{
-		Current = 0;
-	}
-	else {
-		Current = ((ret_Current & 0x1800) >> 11) * 1000; //integer;
-		Current = Current + (((ret_Current & 0x07ff) * 1000) / 2048); // integer + fractional
-		if (ret_Current & 0x8000)
-			Current *= -1;
-	}
+	int              Current = 0;
+	Current = 0; // TODO Add current readings
 
 	/*
 	 * BatteryStatus expects:
