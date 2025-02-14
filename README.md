@@ -7,6 +7,13 @@ This driver is designed for the Siliconmitus SM5714 PMIC fuel gauges found on va
 
 This driver enables Windows to get information about the battery pack used in Samsung devices utilizing the SM5714 PMIC. It does not provide charging capabilities.
 
+## Available features 
+
+- Capacity (State of Charge) in %
+- Voltage in mV
+- Current mA
+- Power state (Charging & Discharging & Critical)
+
 ## ACPI Sample
 
 ```asl
