@@ -37,6 +37,7 @@ Device(BAT)
 ```
 ## Acknowledgements
 * [Gustave Monce](https://github.com/gus33000)
+* [map220v](https://github.com/map220v)
 * [WOA-Project](https://github.com/WOA-Project)
 * [WOA-Msmnile](https://github.com/woa-msmnile)
 * [sunflower2333](https://github.com/sunflower2333)
