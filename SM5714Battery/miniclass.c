@@ -199,8 +199,21 @@ SM5714BatteryQueryBatteryInformation(PSM5714_BATTERY_FDO_DATA DevExt, PBATTERY_I
 	// Fetch cycle count over I2C
 	//
 	int  CycleCount = 0;
-	Status = 0;
-	CycleCount = 0; // TODO Add cycle count readings
+	unsigned short rawCycle = 0;
+
+	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_cycle, sizeof(write_cycle), &readCmd, sizeof(readCmd), &rawCycle, sizeof(rawCycle), 0);
+	if (!NT_SUCCESS(Status))
+	{
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw cycle count. Status=0x%08lX\n", Status);
+		goto Exit;
+	}
+
+	if (rawCycle < 0) {
+		CycleCount = 0;
+	}
+	else {
+		CycleCount = rawCycle & 0x00FF;
+	}
 
 	BatteryInformationResult->CycleCount = CycleCount;
 
@@ -369,6 +382,7 @@ Return Value:
 	WCHAR StringResult[MAX_BATTERY_STRING_SIZE] = { 0 };
 	BATTERY_MANUFACTURE_DATE ManufactureDate = { 0 };
 
+	unsigned short rawTemp = 0;
 	int Temperature = 0;
 	USHORT DateData = 0;
 
@@ -537,7 +551,22 @@ Return Value:
 	// Fetch temperature over I2C
 	//
 	case BatteryTemperature:
-		Temperature = 0; // TODO Add temperature readings
+
+		Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_temperature, sizeof(write_temperature), &readCmd, sizeof(readCmd), &rawTemp, sizeof(rawTemp), 0);
+		if (!NT_SUCCESS(Status))
+		{
+			Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw battery temperature. Status=0x%08lX\n", Status);
+		}
+
+		if (rawTemp < 0) {
+			Temperature = 0;
+		}
+		else {
+			Temperature = ((rawTemp & 0x7fff) >> 8) * 10;                  //integer bit
+			Temperature = Temperature + (((rawTemp & 0x00f0) * 10) / 256); // integer + fractional bit
+			if (rawTemp & 0x8000)
+				Temperature *= -1;
+		}
 
 		Temperature = (ULONG)Temperature / (ULONG)10;
 
@@ -615,6 +644,8 @@ Return Value:
 {
 	PSM5714_BATTERY_FDO_DATA DevExt;
 	NTSTATUS Status;
+	INT16 Rate = 0;
+	UCHAR Flags = 0;
 
 	Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "Entering %!FUNC!\n");
 	PAGED_CODE();
@@ -625,29 +656,62 @@ Return Value:
 		Status = STATUS_NO_SUCH_DEVICE;
 		goto QueryStatusEnd;
 	}
+	//
+	// Fetch battery power state over I2C
+	//
+	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_state, sizeof(write_state), &readCmd, sizeof(readCmd), &Flags, sizeof(Flags), 0);
+	if (!NT_SUCCESS(Status))
+	{
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read battery power state. Status=0x%08lX\n", Status);
+	}
 
-	// Set default flags to: battery discharging
-	BatteryStatus->PowerState = BATTERY_DISCHARGING;
+	if (Flags & (1 << 9))
+	{
+		Trace(
+			TRACE_LEVEL_INFORMATION,
+			SM5714_BATTERY_TRACE,
+			"BATTERY_POWER_ON_LINE\n");
 
-	unsigned char readCmd = (unsigned char)SM5714_FG_REG_SRAM_RDATA;
+		BatteryStatus->PowerState = BATTERY_POWER_ON_LINE;
+	}
+	else if (Flags & (1 << 0))
+	{
+		Trace(
+			TRACE_LEVEL_INFORMATION,
+			SM5714_BATTERY_TRACE,
+			"BATTERY_DISCHARGING\n");
+
+		BatteryStatus->PowerState = BATTERY_DISCHARGING;
+	}
+	else if (Flags & (1 << 1))
+	{
+		Trace(
+			TRACE_LEVEL_INFORMATION,
+			SM5714_BATTERY_TRACE,
+			"BATTERY_CRITICAL\n");
+
+		BatteryStatus->PowerState = BATTERY_CRITICAL;
+	}
+	else
+	{
+		Trace(
+			TRACE_LEVEL_INFORMATION,
+			SM5714_BATTERY_TRACE,
+			"BATTERY_CHARGING\n");
+
+		BatteryStatus->PowerState = BATTERY_CHARGING;
+	}
 
 	//
 	// Fetch State of Charge over I2C
 	//
 	unsigned int     Capacity = 0;
-	unsigned short addr_soc = SM5714_FG_ADDR_SRAM_SOC;
 	unsigned short rawCapacity = 0;
 
-	Status = SpbWriteDataSynchronously(&DevExt->I2CContext, SM5714_FG_REG_SRAM_RADDR, &addr_soc, sizeof(addr_soc));
+	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_capacity, sizeof(write_capacity), &readCmd, sizeof(readCmd), &rawCapacity, sizeof(rawCapacity), 0);
 	if (!NT_SUCCESS(Status))
 	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to write SoC sub-address (0x00) to RADDR (0x8C) . Status=0x%08lX\n", Status);
-	}
-
-	Status = SpbWriteRead(&DevExt->I2CContext, &readCmd, sizeof(readCmd), &rawCapacity, sizeof(rawCapacity), 0);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to WriteRead 0x8D. Status=0x%08lX\n", Status);
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw State of Charge. Status=0x%08lX\n", Status);
 	}
 	
 	Capacity = FIXED_POINT_8_8_EXTEND_TO_INT((unsigned short)rawCapacity, 10);
@@ -655,14 +719,45 @@ Return Value:
 	//
 	// Fetch Voltage(mV) over I2C
 	//
-	unsigned int     Voltage = 0;
-	Voltage = 0; // TODO Add voltage readings
+	unsigned int  Voltage = 0;
+	unsigned short rawOcv = 0;
+
+	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_ocv, sizeof(write_ocv), &readCmd, sizeof(readCmd), &rawOcv, sizeof(rawOcv), 0);
+	if (!NT_SUCCESS(Status))
+	{
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw voltage. Status=0x%08lX\n", Status);
+	}
+
+	if (rawOcv < 0) {
+		Voltage = 4000;
+	}
+	else {
+		Voltage = ((rawOcv & 0x3800) >> 11) * 1000;         //integer;
+		Voltage = Voltage + (((rawOcv & 0x07ff) * 1000) / 2048); // integer + fractional
+	}
 
 	//
 	// Fetch Current (mA) over I2C
 	//
-	int              Current = 0;
-	Current = 0; // TODO Add current readings
+	int            Current = 0;
+	unsigned short rawCurr = 0;
+
+	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_current, sizeof(write_current), &readCmd, sizeof(readCmd), &rawCurr, sizeof(rawCurr), 0);
+	if (!NT_SUCCESS(Status))
+	{
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw current. Status=0x%08lX\n", Status);
+	}
+
+	if (rawCurr < 0)
+	{
+		Current = 0;
+	}
+	else {
+		Current = ((rawCurr & 0x1800) >> 11) * 1000; //integer;
+		Current = Current + (((rawCurr & 0x07ff) * 1000) / 2048); // integer + fractional
+		if (rawCurr & 0x8000)
+			Current *= -1;
+	}
 
 	/*
 	 * BatteryStatus expects:
@@ -671,8 +766,7 @@ Return Value:
 	 * - Rate in mW (signed)
 	 */
 
-	 // mWh
-	 // (6840mAh * 4.4V = 30096mWh)
+	// (4370mAh * 4.4V = 19228 mWh)
 	BatteryStatus->Capacity = (ULONG)Capacity * 19228 / (ULONG)1000;
 	// mV
 	BatteryStatus->Voltage = (ULONG)Voltage;

@@ -78,17 +78,6 @@ Abstract:
 #define DEVICE_NAME_SIZE 0x8
 #define CHEM_SIZE 0x4
 
-#pragma pack(push, 1)
-typedef struct _BQ27742_MANUF_INFO_TYPE
-{
-    UINT16 BatteryManufactureDate;
-    UINT32 BatterySerialNumber;
-    BYTE BatteryManufactureName[MFG_NAME_SIZE];
-    BYTE BatteryDeviceName[DEVICE_NAME_SIZE];
-    BYTE Chemistry[CHEM_SIZE];
-} BQ27742_MANUF_INFO_TYPE, * PBQ27742_MANUF_INFO_TYPE;
-#pragma pack(pop)
-
 typedef struct {
     UNICODE_STRING                  RegistryPath;
 } SM5714_BATTERY_GLOBAL_DATA, *PSM5714_BATTERY_GLOBAL_DATA;

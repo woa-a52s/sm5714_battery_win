@@ -467,8 +467,10 @@ SpbWriteRead(
 	_In_                            SPB_CONTEXT* SpbContext,
 	_In_reads_(SendLength)          PVOID           SendData,
 	_In_                            USHORT          SendLength,
-	_Out_writes_(Length)            PVOID           Data,
-	_In_                            USHORT          Length,
+	_In_reads_(CmdLength)			PVOID			ReadCmd,
+	_In_							USHORT			CmdLength,
+	_Out_writes_(DataLength)        PVOID           Data,
+	_In_                            USHORT          DataLength,
 	_In_                            ULONG           DelayUs
 )
 /*++
@@ -490,34 +492,6 @@ SpbWriteRead(
 
 	NT_ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
-	if (SendData == NULL || SendLength <= 0 ||
-		Data == NULL || Length <= 0)
-	{
-		status = STATUS_INVALID_PARAMETER;
-		Trace(
-			TRACE_LEVEL_ERROR,
-			SM5714_BATTERY_ERROR,
-			"SpbWriteRead failed parameters DataFirst:%p DataLengthFirst:%lu "
-			"DataSecond:%p DataLengthSecond:%lu status:%!STATUS!",
-			SendData,
-			SendLength,
-			Data,
-			Length,
-			status);
-
-		goto exit;
-	}
-
-#if I2C_VERBOSE_LOGGING
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "I2CWRITE: LENGTH=%d", SendLength);
-	for (ULONG j = 0; j < SendLength; j++)
-	{
-		UCHAR byte = ((PUCHAR)SendData)[j];
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, " %02hhX", byte);
-	}
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n");
-#endif
-
 	//
 	// Compact the adjacent writes of the two register accesses into a 
 	// single write transfer list entry without restarts between them.
@@ -529,8 +503,8 @@ SpbWriteRead(
 	//
 	// Build the SPB sequence
 	//
-	SPB_TRANSFER_LIST_AND_ENTRIES(2)    sequence;
-	SPB_TRANSFER_LIST_INIT(&(sequence.List), 2);
+	SPB_TRANSFER_LIST_AND_ENTRIES(3)    sequence;
+	SPB_TRANSFER_LIST_INIT(&(sequence.List), 3);
 
 	{
 		//
@@ -548,11 +522,37 @@ SpbWriteRead(
 			SendLength);
 
 		sequence.List.Transfers[index + 1] = SPB_TRANSFER_LIST_ENTRY_INIT_SIMPLE(
+			SpbTransferDirectionToDevice,
+			0,
+			ReadCmd,
+			CmdLength);
+
+		sequence.List.Transfers[index + 2] = SPB_TRANSFER_LIST_ENTRY_INIT_SIMPLE(
 			SpbTransferDirectionFromDevice,
 			DelayUs,
 			Data,
-			Length);
+			DataLength);
 	}
+
+#if I2C_VERBOSE_LOGGING
+	// Log first transfer (Write 1: register + sub-address)
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "I2CWRITE Transfer 0: LENGTH=%d", SendLength);
+	for (ULONG j = 0; j < SendLength; j++)
+	{
+		UCHAR byte = ((PUCHAR)SendData)[j];
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, " %02hhX", byte);
+	}
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n");
+
+	// Log second transfer (Write 2: Set read command)
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "I2CWRITE Transfer 1: LENGTH=%d", CmdLength);
+	for (ULONG j = 0; j < CmdLength; j++)
+	{
+		UCHAR byte = ((PUCHAR)ReadCmd)[j];
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, " %02hhX", byte);
+	}
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n");
+#endif
 
 	//
 	// Send the read as a Sequence request to the SPB target
@@ -573,8 +573,9 @@ SpbWriteRead(
 	}
 
 #if I2C_VERBOSE_LOGGING
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "I2CREAD: LENGTH=%d", Length);
-	for (ULONG j = 0; j < Length; j++)
+	// Log read result
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "I2CREAD: LENGTH=%d", DataLength);
+	for (ULONG j = 0; j < DataLength; j++)
 	{
 		UCHAR byte = ((PUCHAR)Data)[j];
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, " %02hhX", byte);
@@ -586,7 +587,7 @@ SpbWriteRead(
 	// Check if this is a "short transaction" i.e. the sequence
 	// resulted in lesser bytes transmitted/received than expected
 	//
-	ULONG expectedLength = SendLength + Length;
+	ULONG expectedLength = SendLength + DataLength;
 	if (bytesReturned < expectedLength)
 	{
 		status = STATUS_DEVICE_PROTOCOL_ERROR;

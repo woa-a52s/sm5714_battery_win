@@ -45,8 +45,10 @@ SpbWriteRead(
 	_In_                            SPB_CONTEXT* SpbContext,
 	_In_reads_(SendLength)          PVOID           SendData,
 	_In_                            USHORT          SendLength,
-	_Out_writes_(Length)            PVOID           Data,
-	_In_                            USHORT          Length,
+	_In_reads_(CmdLength)			PVOID			ReadCmd,
+	_In_							USHORT			CmdLength,
+	_Out_writes_(DataLength)        PVOID           Data,
+	_In_                            USHORT          DataLength,
 	_In_                            ULONG           DelayUs
 );
 
