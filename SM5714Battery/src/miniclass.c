@@ -656,51 +656,6 @@ Return Value:
 		Status = STATUS_NO_SUCH_DEVICE;
 		goto QueryStatusEnd;
 	}
-	//
-	// Fetch battery power state over I2C
-	//
-	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_state, sizeof(write_state), &readCmd, sizeof(readCmd), &Flags, sizeof(Flags), 0);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read battery power state. Status=0x%08lX\n", Status);
-	}
-
-	if (Flags & (1 << 9))
-	{
-		Trace(
-			TRACE_LEVEL_INFORMATION,
-			SM5714_BATTERY_TRACE,
-			"BATTERY_POWER_ON_LINE\n");
-
-		BatteryStatus->PowerState = BATTERY_POWER_ON_LINE;
-	}
-	else if (Flags & (1 << 0))
-	{
-		Trace(
-			TRACE_LEVEL_INFORMATION,
-			SM5714_BATTERY_TRACE,
-			"BATTERY_DISCHARGING\n");
-
-		BatteryStatus->PowerState = BATTERY_DISCHARGING;
-	}
-	else if (Flags & (1 << 1))
-	{
-		Trace(
-			TRACE_LEVEL_INFORMATION,
-			SM5714_BATTERY_TRACE,
-			"BATTERY_CRITICAL\n");
-
-		BatteryStatus->PowerState = BATTERY_CRITICAL;
-	}
-	else
-	{
-		Trace(
-			TRACE_LEVEL_INFORMATION,
-			SM5714_BATTERY_TRACE,
-			"BATTERY_CHARGING\n");
-
-		BatteryStatus->PowerState = BATTERY_CHARGING;
-	}
 
 	//
 	// Fetch State of Charge over I2C
@@ -747,16 +702,24 @@ Return Value:
 	{
 		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw current. Status=0x%08lX\n", Status);
 	}
+	Current = ((rawCurr & 0x1800) >> 11) * 1000; //integer;
+	Current = Current + (((rawCurr & 0x07ff) * 1000) / 2048); // integer + fractional
+	if (rawCurr & 0x8000)
+		Current *= -1;
 
-	if (rawCurr < 0)
-	{
-		Current = 0;
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "CURRENT: %d mA", Current);
+
+
+	//
+	// Fetch battery power state (use a dirty workaround for now)
+	//
+	if (Current >= 30) {
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "BATTERY_POWER_ON_LINE\n");
+		BatteryStatus->PowerState = BATTERY_POWER_ON_LINE;
 	}
 	else {
-		Current = ((rawCurr & 0x1800) >> 11) * 1000; //integer;
-		Current = Current + (((rawCurr & 0x07ff) * 1000) / 2048); // integer + fractional
-		if (rawCurr & 0x8000)
-			Current *= -1;
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "BATTERY_DISCHARGING\n");
+		BatteryStatus->PowerState = BATTERY_DISCHARGING;
 	}
 
 	/*
