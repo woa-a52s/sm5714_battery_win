@@ -19,7 +19,7 @@ This driver enables Windows to get information about the battery pack used in Sa
 ```asl
 Device(BAT)
 {
-    Name (_HID, "SM5714")
+    Name (_HID, "SM5714F")
     Name (_UID, 1)
     Name (_DEP, Package() {\_SB_.I2C4})
 
@@ -29,7 +29,7 @@ Device(BAT)
         {
             I2CSerialBus (0x71,, 400000, AddressingMode7Bit, "\\_SB.I2C4",,,,)
 
-            GpioInt (Edge, ActiveLow, Exclusive, PullNone, 0, "\\_SB.GIO0") {54}
+            GpioInt (Edge, ActiveLow, Shared, PullNone, 0, "\\_SB.GIO0") {54}
         })
         Return (RBUF)
     }
