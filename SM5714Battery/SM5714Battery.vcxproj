@@ -11,12 +11,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="SM5714Battery_regs.h" />
-    <ClInclude Include="Spb.h" />
-    <ClInclude Include="SM5714Battery.h" />
-    <ClInclude Include="Trace.h" />
-  </ItemGroup>
-  <ItemGroup>
     <Inf Include="SM5714Battery.inf" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -65,7 +59,7 @@
     <ClCompile>
       <WppEnabled>true</WppEnabled>
       <WppRecorderEnabled>true</WppRecorderEnabled>
-      <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
+      <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">inc\trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
     </ClCompile>
     <Link>
@@ -79,7 +73,7 @@
     <ClCompile>
       <WppEnabled>true</WppEnabled>
       <WppRecorderEnabled>true</WppRecorderEnabled>
-      <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
+      <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">inc\trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
       <WarningLevel>Level3</WarningLevel>
       <TreatWarningAsError>false</TreatWarningAsError>
@@ -95,9 +89,15 @@
     <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="miniclass.c" />
-    <ClCompile Include="Spb.c" />
-    <ClCompile Include="wdf.c" />
+    <ClInclude Include="inc\SM5714Battery.h" />
+    <ClInclude Include="inc\SM5714Battery_regs.h" />
+    <ClInclude Include="inc\Spb.h" />
+    <ClInclude Include="inc\Trace.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\miniclass.c" />
+    <ClCompile Include="src\Spb.c" />
+    <ClCompile Include="src\wdf.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -22,8 +22,8 @@
 
 --*/
 
-#include "SM5714Battery.h"
-#include "spb.h"
+#include "..\inc\SM5714Battery.h"
+#include "..\inc\Spb.h"
 #include <spb.tmh>
 #include <reshub.h>
 #include <spb.h>

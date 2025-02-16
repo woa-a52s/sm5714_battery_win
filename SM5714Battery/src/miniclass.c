@@ -17,12 +17,12 @@ Abstract:
 
 //--------------------------------------------------------------------- Includes
 
-#include "SM5714Battery.h"
-#include "Spb.h"
+#include "..\inc\SM5714Battery.h"
+#include "..\inc\Spb.h"
 #include "usbfnbase.h"
 #include "miniclass.tmh"
 
-#include "SM5714Battery_regs.h"
+#include "..\inc\SM5714Battery_regs.h"
 
 //------------------------------------------------------------------- Prototypes
 
