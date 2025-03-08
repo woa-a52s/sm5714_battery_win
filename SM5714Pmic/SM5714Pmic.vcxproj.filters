@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{f294a5dd-b273-433f-88b7-67f1c289cd11}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{dfc543aa-27d6-4811-aca1-fe3d798be5df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Driver Files">
+      <UniqueIdentifier>{b23ba2c4-c7c8-4116-8065-4c0bf4280e6f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Common">
+      <UniqueIdentifier>{65d7e186-b76b-4741-bfe3-951870cf1541}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Common">
+      <UniqueIdentifier>{ef386f3e-c93d-4551-bb2a-df263afdf74a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Charger">
+      <UniqueIdentifier>{4d253c1a-5d97-49cd-bca7-3b35e537909b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\TypeC">
+      <UniqueIdentifier>{2b403ada-2bcd-44c6-95ff-87895a958539}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Charger">
+      <UniqueIdentifier>{cddefa7d-0c9c-4d1b-b1b0-5024a6ccf2ba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\TypeC">
+      <UniqueIdentifier>{116a3e4e-de4e-4ab7-981d-e80e265135a6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Common\driver.h">
+      <Filter>Header Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\registers.h">
+      <Filter>Header Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\spb.h">
+      <Filter>Header Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\spbhelper.h">
+      <Filter>Header Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\trace.h">
+      <Filter>Header Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Charger\charger.h">
+      <Filter>Header Files\Charger</Filter>
+    </ClInclude>
+    <ClInclude Include="TypeC\typec.h">
+      <Filter>Header Files\TypeC</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Common\driver.c">
+      <Filter>Source Files\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\spb.c">
+      <Filter>Source Files\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\spbhelper.c">
+      <Filter>Source Files\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Charger\charger.c">
+      <Filter>Source Files\Charger</Filter>
+    </ClCompile>
+    <ClCompile Include="TypeC\typec.c">
+      <Filter>Source Files\TypeC</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="Common\SM5714Pmic.inf">
+      <Filter>Driver Files</Filter>
+    </Inf>
+  </ItemGroup>
+</Project>

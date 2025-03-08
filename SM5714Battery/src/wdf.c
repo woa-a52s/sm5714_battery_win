@@ -121,23 +121,15 @@ Return Value:
 	// Create the driver object
 	//
 
-	Status = WdfDriverCreate(DriverObject,
-		RegistryPath,
-		&DriverAttributes,
-		&DriverConfig,
-		WDF_NO_HANDLE);
+	Status = WdfDriverCreate(DriverObject, RegistryPath, &DriverAttributes, &DriverConfig, WDF_NO_HANDLE);
 
 	if (!NT_SUCCESS(Status)) {
-		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR,
-			"WdfDriverCreate() Failed. Status 0x%x\n",
-			Status);
-
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR, "WdfDriverCreate() Failed. Status 0x%x\n", Status);
 		goto DriverEntryEnd;
 	}
 
 	GlobalData = GetGlobalData(WdfGetDriver());
-	GlobalData->RegistryPath.MaximumLength = RegistryPath->Length +
-		sizeof(UNICODE_NULL);
+	GlobalData->RegistryPath.MaximumLength = RegistryPath->Length + sizeof(UNICODE_NULL);
 
 	GlobalData->RegistryPath.Length = RegistryPath->Length;
 	GlobalData->RegistryPath.Buffer = WdfDriverGetRegistryPath(WdfGetDriver());
@@ -214,11 +206,7 @@ Return Value:
 		0);
 
 	if (!NT_SUCCESS(Status)) {
-		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR,
-			"WdfDeviceInitAssignWdmIrpPreprocessCallback"
-			"(IRP_MJ_DEVICE_CONTROL) Failed. 0x%x\n",
-			Status);
-
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR, "WdfDeviceInitAssignWdmIrpPreprocessCallback" "(IRP_MJ_DEVICE_CONTROL) Failed. 0x%x\n", Status);
 		goto DriverDeviceAddEnd;
 	}
 
@@ -230,11 +218,7 @@ Return Value:
 		0);
 
 	if (!NT_SUCCESS(Status)) {
-		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR,
-			"WdfDeviceInitAssignWdmIrpPreprocessCallback"
-			"(IRP_MJ_SYSTEM_CONTROL) Failed. 0x%x\n",
-			Status);
-
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR, "WdfDeviceInitAssignWdmIrpPreprocessCallback" "(IRP_MJ_SYSTEM_CONTROL) Failed. 0x%x\n", Status);
 		goto DriverDeviceAddEnd;
 	}
 
@@ -267,27 +251,19 @@ Return Value:
 	DevExt->ClassHandle = NULL;
 	WDF_OBJECT_ATTRIBUTES_INIT(&LockAttributes);
 	LockAttributes.ParentObject = DeviceHandle;
-	Status = WdfWaitLockCreate(&LockAttributes,
-		&DevExt->ClassInitLock);
+	Status = WdfWaitLockCreate(&LockAttributes, &DevExt->ClassInitLock);
 
 	if (!NT_SUCCESS(Status)) {
-		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR,
-			"WdfWaitLockCreate(ClassInitLock) Failed. Status 0x%x\n",
-			Status);
-
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR, "WdfWaitLockCreate(ClassInitLock) Failed. Status 0x%x\n", Status);
 		goto DriverDeviceAddEnd;
 	}
 
 	WDF_OBJECT_ATTRIBUTES_INIT(&LockAttributes);
 	LockAttributes.ParentObject = DeviceHandle;
-	Status = WdfWaitLockCreate(&LockAttributes,
-		&DevExt->StateLock);
+	Status = WdfWaitLockCreate(&LockAttributes, &DevExt->StateLock);
 
 	if (!NT_SUCCESS(Status)) {
-		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR,
-			"WdfWaitLockCreate(StateLock) Failed. Status 0x%x\n",
-			Status);
-
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_ERROR, "WdfWaitLockCreate(StateLock) Failed. Status 0x%x\n", Status);
 		goto DriverDeviceAddEnd;
 	}
 
@@ -350,8 +326,7 @@ Return Value:
 	BattInit.DeviceName = NULL;
 	BattInit.Fdo = WdfDeviceWdmGetDeviceObject(Device);
 	WdfWaitLockAcquire(DevExt->ClassInitLock, NULL);
-	Status = BatteryClassInitializeDevice((PBATTERY_MINIPORT_INFO)&BattInit,
-		&DevExt->ClassHandle);
+	Status = BatteryClassInitializeDevice((PBATTERY_MINIPORT_INFO)&BattInit, &DevExt->ClassHandle);
 
 	WdfWaitLockRelease(DevExt->ClassInitLock);
 	if (!NT_SUCCESS(Status)) {
@@ -380,10 +355,7 @@ Return Value:
 	//
 
 	if (!NT_SUCCESS(Status)) {
-		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_WARN,
-			"IoWMIRegistrationControl() Failed. Status 0x%x\n",
-			Status);
-
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_WARN, "IoWMIRegistrationControl() Failed. Status 0x%x\n", Status);
 		Status = STATUS_SUCCESS;
 	}
 
@@ -427,10 +399,7 @@ Return Value:
 	DeviceObject = WdfDeviceWdmGetDeviceObject(Device);
 	Status = IoWMIRegistrationControl(DeviceObject, WMIREG_ACTION_DEREGISTER);
 	if (!NT_SUCCESS(Status)) {
-		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_WARN,
-			"IoWMIRegistrationControl() Failed. Status 0x%x\n",
-			Status);
-
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_WARN, "IoWMIRegistrationControl() Failed. Status 0x%x\n", Status);
 		Status = STATUS_SUCCESS;
 	}
 
@@ -567,12 +536,7 @@ Return Value:
 
 	if (!NT_SUCCESS(status))
 	{
-		Trace(
-			TRACE_LEVEL_ERROR,
-			SM5714_BATTERY_ERROR,
-			"Error finding CmResourceTypeConnection resource - %!STATUS!",
-			status);
-
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_ERROR, "Error finding CmResourceTypeConnection resource - %!STATUS!", status);
 		goto exit;
 	}
 
@@ -583,12 +547,7 @@ Return Value:
 
 	if (!NT_SUCCESS(status))
 	{
-		Trace(
-			TRACE_LEVEL_ERROR,
-			SM5714_BATTERY_ERROR,
-			"Error in Spb initialization - %!STATUS!",
-			status);
-
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_ERROR, "Error in Spb initialization - %!STATUS!", status);
 		goto exit;
 	}
 
@@ -639,8 +598,7 @@ Return Value:
 	PAGED_CODE();
 	Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "Entering %!FUNC!\n");
 
-	ASSERTMSG("Must be called at IRQL = PASSIVE_LEVEL",
-		(KeGetCurrentIrql() == PASSIVE_LEVEL));
+	ASSERTMSG("Must be called at IRQL = PASSIVE_LEVEL", (KeGetCurrentIrql() == PASSIVE_LEVEL));
 
 	DevExt = GetDeviceExtension(Device);
 	Status = STATUS_NOT_SUPPORTED;
@@ -741,11 +699,7 @@ Return Value:
 	WdfWaitLockAcquire(DevExt->ClassInitLock, NULL);
 	if (DevExt->ClassHandle != NULL) {
 		DeviceObject = WdfDeviceWdmGetDeviceObject(Device);
-		Status = BatteryClassSystemControl(DevExt->ClassHandle,
-			&DevExt->WmiLibContext,
-			DeviceObject,
-			Irp,
-			&Disposition);
+		Status = BatteryClassSystemControl(DevExt->ClassHandle, &DevExt->WmiLibContext, DeviceObject, Irp, &Disposition);
 	}
 
 	WdfWaitLockRelease(DevExt->ClassInitLock);
@@ -937,11 +891,7 @@ Return Value:
 		Buffer);
 
 	if (Status == STATUS_WMI_GUID_NOT_FOUND) {
-		Status = WmiCompleteRequest(DeviceObject,
-			Irp,
-			STATUS_WMI_GUID_NOT_FOUND,
-			0,
-			IO_NO_INCREMENT);
+		Status = WmiCompleteRequest(DeviceObject, Irp, STATUS_WMI_GUID_NOT_FOUND, 0, IO_NO_INCREMENT);
 	}
 
 SM5714BatteryQueryWmiDataBlockEnd:
