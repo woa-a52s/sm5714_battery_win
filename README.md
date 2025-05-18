@@ -25,8 +25,8 @@ Device (PM3P)
     Name (_UID, 1)
     Name (_DEP, Package()
 	{
-		\_SB_.I2C4,
-		\_SB_.I2C9
+             \_SB_.I2C4,
+             \_SB_.I2C9
 	})
 
     Method (_CRS, 0x0, NotSerialized)
@@ -51,8 +51,8 @@ Device (PM3P)
     Method (PMIC, 0, Serialized)
     {
         Return (Package ()
-		{
-            1,		// Autostop
+        {
+            1,	    // Autostop
             1300,   // Input Current Limit (mA)
             1300,   // Charging Current (mA)
             225,    // Topoff Current (mA)
@@ -70,17 +70,17 @@ Device (BAT)
     Name (_UID, 1)
     Name (_DEP, Package()
 	{
-		\_SB_.I2C4
+             \_SB_.I2C4
 	})
 
     Method (_CRS, 0x0, NotSerialized)
     {
         Name (RBUF, ResourceTemplate ()
         {
-			// SM5714 fuelgauge I2C slave address
+            // SM5714 fuelgauge I2C slave address
             I2CSerialBus(0x71,, 400000, AddressingMode7Bit, "\\_SB.I2C4",,,,)
 
-			// Fuelgauge GPIO Interrupt
+            // Fuelgauge GPIO Interrupt
             GpioInt(Edge, ActiveLow, Shared, PullNone, 0, "\\_SB.GIO0") {54}
         })
         Return (RBUF)
@@ -89,8 +89,8 @@ Device (BAT)
     Method (BATT, 0, Serialized)
     {
         Return (Package ()
-		{
-            19800,	// DesignCapacity (mWh)
+        {
+            19800,  // DesignCapacity (mWh)
             19228,  // FullChargeCapacity (mWh)
             1,      // BatteryTechnology: 1 = rechargeable
             4500,   // DesignVoltage (mV)
