@@ -107,6 +107,11 @@ typedef struct {
 
     WDFWAITLOCK                     StateLock;
     ULONG                           BatteryTag;
+
+    ULONG                           DesignedCapacity_mWh;
+    ULONG                           FullChargedCapacity_mWh;
+    UCHAR                           BatteryTechnology;
+    ULONG                           DesignVoltage_mV;
 } SM5714_BATTERY_FDO_DATA, *PSM5714_BATTERY_FDO_DATA;
 
 //------------------------------------------------------ WDF Context Declaration

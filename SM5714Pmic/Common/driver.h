@@ -41,6 +41,11 @@ typedef struct _DEVICE_CONTEXT
 	BOOLEAN DevicePoweredOn;
 	WDFWAITLOCK DataLock;
 
+	BOOLEAN                         Autostop;            // 0 = off, 1 = on
+	ULONG                           InputCurrentLimit;   // mA
+	ULONG                           ChargingCurrent;     // mA
+	ULONG                           TopoffCurrent;       // mA
+
 } DEVICE_CONTEXT, *PDEVICE_CONTEXT;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT, GetDeviceContext)

@@ -1,17 +1,10 @@
 #include "..\Common\registers.h"
 #include "..\Common\spbhelper.h"
 #include "charger.h"
+#include "..\Common\driver.h"
 
 static ULONG DebugLevel = 100;
 static ULONG DebugCatagories = DBG_INIT || DBG_PNP || DBG_IOCTL;
-
-//
-// Charger configuration
-//
-bool autostop = true; // Auto stops charging when batt reaches 100%
-unsigned int input_current_limit = 1300;
-unsigned int charging_current = 1300;
-unsigned int topoff_current = 225;
 
 int set_autostop(_In_ PDEVICE_CONTEXT pDevice, bool enable)
 {
@@ -79,10 +72,10 @@ int set_topoff_current(_In_ PDEVICE_CONTEXT pDevice, unsigned int mA)
 int charger_probe(_In_ PDEVICE_CONTEXT pDevice)
 {
     // Configure charging parameters
-    set_autostop(pDevice, autostop);
-    set_input_current_limit(pDevice, input_current_limit);
-    set_charging_current(pDevice, charging_current);
-    set_topoff_current(pDevice, topoff_current);
+    set_autostop(pDevice, (bool)pDevice->Autostop);
+    set_input_current_limit(pDevice, pDevice->InputCurrentLimit);
+    set_charging_current(pDevice, pDevice->ChargingCurrent);
+    set_topoff_current(pDevice, pDevice->TopoffCurrent);
     return 0; // fix this
 }
 

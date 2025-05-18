@@ -91,11 +91,13 @@
   <ItemGroup>
     <ClInclude Include="inc\SM5714Battery.h" />
     <ClInclude Include="inc\SM5714Battery_regs.h" />
+    <ClInclude Include="inc\sm5714_fuelgauge.h" />
     <ClInclude Include="inc\Spb.h" />
     <ClInclude Include="inc\Trace.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\miniclass.c" />
+    <ClCompile Include="src\sm5714_fuelgauge.c" />
     <ClCompile Include="src\Spb.c" />
     <ClCompile Include="src\wdf.c" />
   </ItemGroup>

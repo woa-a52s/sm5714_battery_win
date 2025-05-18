@@ -28,7 +28,7 @@
 #include <reshub.h>
 #include <spb.h>
 
-#define I2C_VERBOSE_LOGGING 1
+#define I2C_VERBOSE_LOGGING 0
 
 NTSTATUS
 SpbDoWriteDataSynchronously(

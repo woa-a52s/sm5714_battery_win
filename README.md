@@ -12,35 +12,51 @@ This driver enables Windows to get information about the battery pack used in Sa
 - Capacity (State of Charge) in %
 - Voltage in mV
 - Current mA
+- Temperature (not reported to OS yet)
 - Power state (Charging & Discharging & Critical)
 - Charging
 
 ## PMIC ACPI Sample
 
 ```asl
-Device(PM3P)
+Device (PM3P)
 {
     Name (_HID, "SM5714P")
     Name (_UID, 1)
-    Name (_DEP, Package() {\_SB_.I2C4, \_SB_.I2C9})
+    Name (_DEP, Package()
+	{
+		\_SB_.I2C4,
+		\_SB_.I2C9
+	})
 
     Method (_CRS, 0x0, NotSerialized)
     {
         Name (RBUF, ResourceTemplate ()
         {
             // Charger Slave Address
-            I2CSerialBus (0x49,, 400000, AddressingMode7Bit, "\\_SB.I2C4",,,,)
+            I2CSerialBus(0x49,, 400000, AddressingMode7Bit, "\\_SB.I2C4",,,,)
 
             // USBPD Slave Address
-            I2CSerialBus (0x33,, 400000, AddressingMode7Bit, "\\_SB.I2C9",,,,)
+            I2CSerialBus(0x33,, 400000, AddressingMode7Bit, "\\_SB.I2C9",,,,)
 
             // Charger GPIO Interrupt
-            GpioInt (Edge, ActiveLow, Shared, PullNone, 0, "\\_SB.GIO0") {54}
+            GpioInt(Edge, ActiveLow, Shared, PullNone, 0, "\\_SB.GIO0") {54}
 
             // USBPD GPIO Interrupt
-            GpioInt (Edge, ActiveLow, Shared, PullNone, 0, "\\_SB.GIO0") {140}
+            GpioInt(Edge, ActiveLow, Shared, PullNone, 0, "\\_SB.GIO0") {140}
         })
         Return (RBUF)
+    }
+
+    Method (PMIC, 0, Serialized)
+    {
+        Return (Package ()
+		{
+            1,		// Autostop
+            1300,   // Input Current Limit (mA)
+            1300,   // Charging Current (mA)
+            225,    // Topoff Current (mA)
+        })
     }
 }
 ```
@@ -48,21 +64,37 @@ Device(PM3P)
 ## Miniclass ACPI Sample
 
 ```asl
-Device(BAT)
+Device (BAT)
 {
     Name (_HID, "SM5714F")
     Name (_UID, 1)
-    Name (_DEP, Package() {\_SB_.I2C4})
+    Name (_DEP, Package()
+	{
+		\_SB_.I2C4
+	})
 
     Method (_CRS, 0x0, NotSerialized)
     {
         Name (RBUF, ResourceTemplate ()
         {
-            I2CSerialBus (0x71,, 400000, AddressingMode7Bit, "\\_SB.I2C4",,,,)
+			// SM5714 fuelgauge I2C slave address
+            I2CSerialBus(0x71,, 400000, AddressingMode7Bit, "\\_SB.I2C4",,,,)
 
-            GpioInt (Edge, ActiveLow, Shared, PullNone, 0, "\\_SB.GIO0") {54}
+			// Fuelgauge GPIO Interrupt
+            GpioInt(Edge, ActiveLow, Shared, PullNone, 0, "\\_SB.GIO0") {54}
         })
         Return (RBUF)
+    }
+	
+    Method (BATT, 0, Serialized)
+    {
+        Return (Package ()
+		{
+            19800,	// DesignCapacity (mWh)
+            19228,  // FullChargeCapacity (mWh)
+            1,      // BatteryTechnology: 1 = rechargeable
+            4500,   // DesignVoltage (mV)
+        })
     }
 }
 ```

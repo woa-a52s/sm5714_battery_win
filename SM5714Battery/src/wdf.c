@@ -19,6 +19,8 @@ Abstract:
 
 #include "..\inc\SM5714Battery.h"
 #include "wdf.tmh"
+#include <acpiioct.h>
+#include <wdm.h>
 
 //------------------------------------------------------------------- Prototypes
 
@@ -51,6 +53,80 @@ EVT_WDF_OBJECT_CONTEXT_CLEANUP SM5714BatteryEvtDriverContextCleanup;
 #pragma alloc_text(PAGE, SM5714BatteryEvtDriverContextCleanup)
 
 //-------------------------------------------------------------------- Functions
+
+#define GET_INTEGER(_arg_)  (*(PULONG UNALIGNED) ((_arg_)->Data))
+
+NTSTATUS
+Sm5714FetchCapacities(
+	_In_  WDFDEVICE  Device,
+	_Out_ PULONG     DesignedCap_mWh,
+	_Out_ PULONG     FullCap_mWh,
+	_Out_opt_ PUCHAR BatteryTech,
+	_Out_opt_ PULONG DesignVoltage_mV
+)
+{
+	// Build the ACPI request
+	ACPI_EVAL_INPUT_BUFFER input = { 0 };
+	input.Signature = ACPI_EVAL_INPUT_BUFFER_SIGNATURE;
+	RtlCopyMemory(input.MethodName, "BATT", 4);
+
+	ULONG const outLen = sizeof(ACPI_EVAL_OUTPUT_BUFFER) +
+		8 * sizeof(ACPI_METHOD_ARGUMENT);
+	PACPI_EVAL_OUTPUT_BUFFER output =
+		(PACPI_EVAL_OUTPUT_BUFFER)ExAllocatePoolZero(
+			NonPagedPoolNx, outLen, 'ttaB');
+	if (!output)
+		return STATUS_INSUFFICIENT_RESOURCES;
+
+	WDF_MEMORY_DESCRIPTOR inDesc, outDesc;
+	WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(&inDesc, &input, sizeof(input));
+	WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(&outDesc, output, outLen);
+
+	ULONG_PTR bytesReturned = 0;
+	NTSTATUS status = WdfIoTargetSendIoctlSynchronously(
+		WdfDeviceGetIoTarget(Device),
+		NULL,
+		IOCTL_ACPI_EVAL_METHOD,
+		&inDesc,
+		&outDesc,
+		NULL,
+		&bytesReturned
+	);
+
+	// Parse four integers
+	enum { DESIGN = 0, FULL = 1, TECH = 2, VOLT = 3 };
+
+	if (NT_SUCCESS(status) &&
+		output->Signature == ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE &&
+		output->Count >= 2 &&
+		output->Argument[DESIGN].Type == ACPI_METHOD_ARGUMENT_INTEGER &&
+		output->Argument[FULL].Type == ACPI_METHOD_ARGUMENT_INTEGER)
+	{
+		*DesignedCap_mWh = GET_INTEGER(&output->Argument[DESIGN]);
+		*FullCap_mWh = GET_INTEGER(&output->Argument[FULL]);
+
+		if (BatteryTech &&
+			output->Count > TECH &&
+			output->Argument[TECH].Type == ACPI_METHOD_ARGUMENT_INTEGER)
+		{
+			*BatteryTech = (UCHAR)GET_INTEGER(&output->Argument[TECH]);
+		}
+
+		if (DesignVoltage_mV &&
+			output->Count > VOLT &&
+			output->Argument[VOLT].Type == ACPI_METHOD_ARGUMENT_INTEGER)
+		{
+			*DesignVoltage_mV = GET_INTEGER(&output->Argument[VOLT]);
+		}
+	}
+	else
+	{
+		status = STATUS_ACPI_INVALID_DATA;
+	}
+
+	ExFreePool(output);
+	return status;
+}
 
 _Use_decl_annotations_
 NTSTATUS
@@ -460,6 +536,8 @@ Return Value:
 	return STATUS_UNSUCCESSFUL;
 }
 
+
+
 _Use_decl_annotations_
 NTSTATUS
 SM5714BatteryDevicePrepareHardware(
@@ -549,6 +627,20 @@ Return Value:
 	{
 		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_ERROR, "Error in Spb initialization - %!STATUS!", status);
 		goto exit;
+	}
+
+	status = Sm5714FetchCapacities(Device,
+		&devContext->DesignedCapacity_mWh,
+		&devContext->FullChargedCapacity_mWh,
+		&devContext->BatteryTechnology,
+		&devContext->DesignVoltage_mV);
+
+	if (!NT_SUCCESS(status)) {
+		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_ERROR,
+			"Sm5714FetchCapacities failed (0x%08X)\n",
+			status);
+
+		return status;
 	}
 
 	SM5714BatteryPrepareHardware(Device);

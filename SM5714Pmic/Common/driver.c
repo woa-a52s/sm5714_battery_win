@@ -5,6 +5,64 @@
 static ULONG DebugLevel = 100;
 static ULONG DebugCatagories = DBG_INIT || DBG_PNP || DBG_IOCTL;
 
+#define GET_INTEGER(_arg_) (*(PULONG UNALIGNED)((_arg_)->Data))
+
+static
+NTSTATUS
+FetchPmicConfig(
+    _In_  WDFDEVICE        Device,
+    _Out_ PDEVICE_CONTEXT  DevCtx
+)
+{
+    ACPI_EVAL_INPUT_BUFFER input = { 0 };
+    input.Signature = ACPI_EVAL_INPUT_BUFFER_SIGNATURE;
+    memcpy(input.MethodName, "PMIC", 4);
+
+    const ULONG outLen =
+        sizeof(ACPI_EVAL_OUTPUT_BUFFER) + 8 * sizeof(ACPI_METHOD_ARGUMENT);
+
+    PACPI_EVAL_OUTPUT_BUFFER output =
+        (PACPI_EVAL_OUTPUT_BUFFER)ExAllocatePoolZero(
+            NonPagedPoolNx, outLen, 'cimP');
+    if (!output)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    WDF_MEMORY_DESCRIPTOR inDesc, outDesc;
+    WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(&inDesc, &input, sizeof(input));
+    WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(&outDesc, output, outLen);
+
+    ULONG_PTR bytesReturned = 0;
+    NTSTATUS status = WdfIoTargetSendIoctlSynchronously(
+        WdfDeviceGetIoTarget(Device),
+        NULL,
+        IOCTL_ACPI_EVAL_METHOD,
+        &inDesc,
+        &outDesc,
+        NULL,
+        &bytesReturned);
+
+    if (NT_SUCCESS(status) &&
+        output->Signature == ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE &&
+        output->Count >= 4 &&
+        output->Argument[0].Type == ACPI_METHOD_ARGUMENT_INTEGER &&
+        output->Argument[1].Type == ACPI_METHOD_ARGUMENT_INTEGER &&
+        output->Argument[2].Type == ACPI_METHOD_ARGUMENT_INTEGER &&
+        output->Argument[3].Type == ACPI_METHOD_ARGUMENT_INTEGER)
+    {
+        DevCtx->Autostop = GET_INTEGER(&output->Argument[0]) ? TRUE : FALSE;
+        DevCtx->InputCurrentLimit = GET_INTEGER(&output->Argument[1]);
+        DevCtx->ChargingCurrent = GET_INTEGER(&output->Argument[2]);
+        DevCtx->TopoffCurrent = GET_INTEGER(&output->Argument[3]);
+    }
+    else
+    {
+        status = STATUS_ACPI_INVALID_DATA;
+    }
+
+    ExFreePool(output);
+    return status;
+}
+
 NTSTATUS
 DriverEntry(
     __in PDRIVER_OBJECT  DriverObject,
@@ -115,6 +173,8 @@ Status
         status = STATUS_NOT_FOUND;
     }
 
+
+
     return status;
 }
 
@@ -180,6 +240,20 @@ Status
     PDEVICE_CONTEXT pDevice = GetDeviceContext(FxDevice);
     NTSTATUS status = STATUS_SUCCESS;
     Print(DEBUG_LEVEL_INFO, DBG_PNP, "OnD0Entry called\n");
+
+    status = FetchPmicConfig(FxDevice, pDevice);
+    if (!NT_SUCCESS(status))
+    {
+        Print(DEBUG_LEVEL_INFO, DBG_INIT, "PMIC ACPI method missing\n");
+        return status;
+    }
+
+    Print(DEBUG_LEVEL_INFO, DBG_INIT,
+        "PMIC cfg: Autostop=%s  ICL=%lu mA  ICHG=%lu mA  TOP=%lu mA\n",
+        pDevice->Autostop ? "ON" : "OFF",
+        pDevice->InputCurrentLimit,
+        pDevice->ChargingCurrent,
+        pDevice->TopoffCurrent);
 
     // Configure charging
     status = charger_probe(pDevice);

@@ -18,11 +18,9 @@ Abstract:
 //--------------------------------------------------------------------- Includes
 
 #include "..\inc\SM5714Battery.h"
-#include "..\inc\Spb.h"
 #include "usbfnbase.h"
 #include "miniclass.tmh"
-
-#include "..\inc\SM5714Battery_regs.h"
+#include "..\inc\sm5714_fuelgauge.h"
 
 //------------------------------------------------------------------- Prototypes
 
@@ -176,44 +174,26 @@ Return Value:
 NTSTATUS
 SM5714BatteryQueryBatteryInformation(PSM5714_BATTERY_FDO_DATA DevExt, PBATTERY_INFORMATION BatteryInformationResult)
 {
+	ULONG    CycleCount;
 	NTSTATUS Status;
 
 	Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "Entering %!FUNC!\n");
 
 	// Set up battery info (chemistry, capacity in mWh, etc.)
 	BatteryInformationResult->Capabilities = BATTERY_SYSTEM_BATTERY;
-	BatteryInformationResult->Technology = 1; // Li-Ion
+	BatteryInformationResult->Technology = DevExt->BatteryTechnology;
 
 	BYTE LION[4] = {'L','I','O','N'};
 	RtlCopyMemory(BatteryInformationResult->Chemistry, LION, 4);
 
-	// For a 4500 mAh Li-ion battery at 4.4 V:
-	BatteryInformationResult->DesignedCapacity = 19800; // mWh (4500mAh * 4.4V)
-	BatteryInformationResult->FullChargedCapacity = 19228; // mWh (4370mAh * 4.4V)
+	BatteryInformationResult->DesignedCapacity = DevExt->DesignedCapacity_mWh;
+	BatteryInformationResult->FullChargedCapacity = DevExt->FullChargedCapacity_mWh;
 
 	BatteryInformationResult->DefaultAlert1 = BatteryInformationResult->FullChargedCapacity * 7 / 100; // 7% of total capacity for error
 	BatteryInformationResult->DefaultAlert2 = BatteryInformationResult->FullChargedCapacity * 9 / 100; // 9% of total capacity for warning
 	BatteryInformationResult->CriticalBias = 0;
 
-	//
-	// Fetch cycle count over I2C
-	//
-	int  CycleCount = 0;
-	unsigned short rawCycle = 0;
-
-	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_cycle, sizeof(write_cycle), &readCmd, sizeof(readCmd), &rawCycle, sizeof(rawCycle), 0);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw cycle count. Status=0x%08lX\n", Status);
-		goto Exit;
-	}
-
-	if (rawCycle < 0) {
-		CycleCount = 0;
-	}
-	else {
-		CycleCount = rawCycle & 0x00FF;
-	}
+	sm5714_Get_CycleCount(DevExt, &CycleCount);
 
 	BatteryInformationResult->CycleCount = CycleCount;
 
@@ -238,6 +218,7 @@ SM5714BatteryQueryBatteryInformation(PSM5714_BATTERY_FDO_DATA DevExt, PBATTERY_I
 		BatteryInformationResult->CriticalBias,
 		BatteryInformationResult->CycleCount);
 
+	Status = STATUS_SUCCESS;
 Exit:
 	Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "Leaving %!FUNC!: Status = 0x%08lX\n", Status);
 	return Status;
@@ -537,7 +518,7 @@ Return Value:
 
 	case BatteryGranularityInformation:
 
-		ReportingScale.Capacity = 4500;
+		ReportingScale.Capacity = DevExt->DesignVoltage_mV;
 		ReportingScale.Granularity = 1;
 
 		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "BATTERY_REPORTING_SCALE: Capacity: %d, Granularity: %d\n", ReportingScale.Capacity, ReportingScale.Granularity);
@@ -547,38 +528,15 @@ Return Value:
 		Status = STATUS_SUCCESS;
 		break;
 
-	//
-	// Fetch temperature over I2C
-	//
 	case BatteryTemperature:
 
-		Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_temperature, sizeof(write_temperature), &readCmd, sizeof(readCmd), &rawTemp, sizeof(rawTemp), 0);
-		if (!NT_SUCCESS(Status))
-		{
-			Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw battery temperature. Status=0x%08lX\n", Status);
-		}
+		sm5714_Get_BatteryTemperature(DevExt, &Temperature);
 
-		if (rawTemp < 0) {
-			Temperature = 0;
-		}
-		else {
-			Temperature = ((rawTemp & 0x7fff) >> 8) * 10;                  //integer bit
-			Temperature = Temperature + (((rawTemp & 0x00f0) * 10) / 256); // integer + fractional bit
-			if (rawTemp & 0x8000)
-				Temperature *= -1;
-		}
-
-		Temperature = (ULONG)Temperature / (ULONG)10;
-
-		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "Battery temperature: %d\n", Temperature);
+		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "Battery temperature: %d C\n", Temperature);
 
 		ReturnBuffer = &Temperature;
 		ReturnBufferLength = sizeof(ULONG);
 		Status = STATUS_SUCCESS;
-		break;
-
-	default:
-		Status = STATUS_INVALID_PARAMETER;
 		break;
 	}
 
@@ -657,63 +615,23 @@ Return Value:
 		goto QueryStatusEnd;
 	}
 
-	//
-	// Fetch State of Charge over I2C
-	//
+	// Fetch State of Charge
 	unsigned int     Capacity = 0;
-	unsigned short rawCapacity = 0;
+	sm5714_Get_BatterySoC(DevExt, &Capacity);
 
-	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_capacity, sizeof(write_capacity), &readCmd, sizeof(readCmd), &rawCapacity, sizeof(rawCapacity), 0);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw State of Charge. Status=0x%08lX\n", Status);
-	}
-	
-	Capacity = FIXED_POINT_8_8_EXTEND_TO_INT((unsigned short)rawCapacity, 10);
+	// Fetch Voltage(mV)
+	unsigned int     Voltage = 0;
+	sm5714_Get_BatteryVoltage(DevExt, &Voltage);
 
-	//
-	// Fetch Voltage(mV) over I2C
-	//
-	unsigned int  Voltage = 0;
-	unsigned short rawOcv = 0;
-
-	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_ocv, sizeof(write_ocv), &readCmd, sizeof(readCmd), &rawOcv, sizeof(rawOcv), 0);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw voltage. Status=0x%08lX\n", Status);
-	}
-
-	if (rawOcv < 0) {
-		Voltage = 4000;
-	}
-	else {
-		Voltage = ((rawOcv & 0x3800) >> 11) * 1000;         //integer;
-		Voltage = Voltage + (((rawOcv & 0x07ff) * 1000) / 2048); // integer + fractional
-	}
-
-	//
 	// Fetch Current (mA) over I2C
-	//
-	int            Current = 0;
-	unsigned short rawCurr = 0;
-
-	Status = SpbWriteRead(&DevExt->I2CContext, (PVOID)write_current, sizeof(write_current), &readCmd, sizeof(readCmd), &rawCurr, sizeof(rawCurr), 0);
-	if (!NT_SUCCESS(Status))
-	{
-		Trace(TRACE_LEVEL_ERROR, SM5714_BATTERY_TRACE, "Failed to SPB write/read raw current. Status=0x%08lX\n", Status);
-	}
-	Current = ((rawCurr & 0x1800) >> 11) * 1000; //integer;
-	Current = Current + (((rawCurr & 0x07ff) * 1000) / 2048); // integer + fractional
-	if (rawCurr & 0x8000)
-		Current *= -1;
-
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "CURRENT: %d mA", Current);
-
+	int     Current = 0;
+	sm5714_Get_BatteryCurrent(DevExt, &Current);
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "CURRENT: %d mA\n", Current);
 
 	//
 	// Fetch battery power state (use a dirty workaround for now)
 	//
-	if (Current >= 30) {
+	if (Current >= 8) {
 		Trace(TRACE_LEVEL_INFORMATION, SM5714_BATTERY_TRACE, "BATTERY_POWER_ON_LINE\n");
 		BatteryStatus->PowerState = BATTERY_POWER_ON_LINE;
 	}
@@ -729,8 +647,8 @@ Return Value:
 	 * - Rate in mW (signed)
 	 */
 
-	// (4370mAh * 4.4V = 19228 mWh)
-	BatteryStatus->Capacity = (ULONG)Capacity * 19228 / (ULONG)1000;
+	// mW
+	BatteryStatus->Capacity = (ULONG)Capacity * DevExt->FullChargedCapacity_mWh / (ULONG)1000;
 	// mV
 	BatteryStatus->Voltage = (ULONG)Voltage;
 	// mW (Signed)

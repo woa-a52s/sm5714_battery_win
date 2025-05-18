@@ -25,7 +25,7 @@ Revision History:
 
 static ULONG DebugLevel = 100;
 static ULONG DebugCatagories = DBG_INIT || DBG_PNP || DBG_IOCTL;
-#define I2C_VERBOSE_LOGGING 1
+#define I2C_VERBOSE_LOGGING 0
 
 NTSTATUS
 SpbDoWriteDataSynchronously(
